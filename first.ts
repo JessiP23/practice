@@ -1,24 +1,30 @@
-// infer extracts the array item type
-type DeepReadonly<T> = T extends (infer U)[]
-    // if it is an array
-    ? ReadonlyArray<DeepReadonly<U>>
-    // if it is an object
-    : T extends object
-    ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
-    : T
+type Listener<T> = (payload: T) => void
 
-type Config = { db: { host: string; port: number }; flags: string[] }
-type FrozenConfig = DeepReadonly<Config>
+class EventEmitter<Events extends Record<string, unknown>> {
+  private listeners = {} as { [K in keyof Events]?: Listener<Events[K]>[] }
 
-const sampleConfig: FrozenConfig = {
-  db: { host: "localhost", port: 5432 },
-  flags: ["beta", "dark-mode"]
+  on<K extends keyof Events>(event: K, fn: Listener<Events[K]>): this {
+    this.listeners[event]?.push(fn) || (this.listeners[event] = [fn])
+    return this
+  }
+  off<K extends keyof Events>(event: K, fn: Listener<Events[K]>): this {
+    this.listeners[event] = this.listeners[event]?.filter((f) => f !== fn)
+    return this
+  }
+  emit<K extends keyof Events>(event: K, payload: Events[K]): void {
+    this.listeners[event]?.forEach((fn) => fn(payload))
+  }
 }
 
-function printFrozenConfig(config: FrozenConfig): void {
-  console.log("db host:", config.db.host)
-  console.log("db port:", config.db.port)
-  console.log("flags:", config.flags.join(", "))
-}
+const emitter = new EventEmitter<{ login: { userId: string }; logout: void }>()
+const onLogin = ({ userId }: { userId: string }) => console.log('login:', userId)
+const onLogout = () => console.log('logout')
 
-printFrozenConfig(sampleConfig)
+emitter.on('login', onLogin)
+emitter.on('logout', onLogout)
+
+emitter.emit('login', { userId: 'u-123' })
+emitter.emit('logout', undefined)
+
+emitter.off('login', onLogin)
+emitter.emit('login', { userId: 'u-456' })
